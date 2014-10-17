@@ -25,13 +25,18 @@ import qualified System.Metrics.Distribution as D (add)
 -- Public Types ---------------------------------------------------------------
 -- Semi-Public Types ----------------------------------------------------------
 
+{- |
+  This type is the type of things that can be run by the moonshine framework.
+  Generate values of this type using `route`, and run the value as a web
+  service using `runMoonshine`.
+-}
 data Moonshine = M [(ByteString, Snap ())]
 
 
 -- Public Functions -----------------------------------------------------------
 
 {- |
-  Run a snap web service in the moonshine framework.
+  Run a `Moonshine` value that was generated from a user-defined configuration.
 -}
 runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Moonshine) -> IO ()
 runMoonshine init = do
