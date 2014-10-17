@@ -48,11 +48,34 @@ loadConfig path = do
 route :: MonadSnap m => [(ByteString, m a)] -> m a
 route = Snap.route
 
+{- |
+  Logging configuration that Moonshine should use to initialize logging.
+
+  This type is an instance of FromJSON, so you can easily use it in your configuration as:
+
+  @
+  data MyConfig = MyConfig {
+    logging :: LoggingConfig
+  } deriving (Generic)
+  instance FromJSON MyConfig
+  @
+-}
 data LoggingConfig = LoggingConfig {
   level :: Priority
 } deriving (Generic)
 
+{- |
+  Your Config type must be an instance of HasLoggingConfig.
+-}
 class HasLoggingConfig a where
+  {- |
+    Extract the LoggingConfig from your config type.
+
+    This can be Nothing if your application allows an empty or absent logging config; in this case, Moonshine will set up some
+    sensible defaults.
+
+    See sunrise for an example of an application that does NOT support an absent logging config.
+  -}
   getLoggingConfig :: a -> Maybe LoggingConfig
   getLoggingConfig _ = Nothing
 
