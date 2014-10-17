@@ -1,35 +1,66 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
 module Web.Moonshine (
   LoggingConfig(), HasLoggingConfig(..),
   runMoonshine,
   route
 ) where
 
-import GHC.Generics (Generic)
-
-import qualified Data.Text as T
-import Data.ByteString (ByteString)
-import System.Directory (createDirectoryIfMissing)
-import Snap (Snap, quickHttpServe, MonadSnap)
-import Data.Yaml (FromJSON(..), decodeFileEither)
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..))
+import Data.ByteString (ByteString)
+import Data.Text.Encoding (decodeUtf8)
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
+import GHC.Generics (Generic)
+import Snap (Snap, quickHttpServe, MonadSnap)
+import System.Directory (createDirectoryIfMissing)
 import System.Log (Priority())
+import System.Metrics.Distribution (Distribution)
+import System.Remote.Monitoring (Server, forkServer, getDistribution)
+import qualified Data.Text as T
 import qualified Snap (route)
+import qualified System.Metrics.Distribution as D (add)
 
 -- Public Types ---------------------------------------------------------------
 -- Semi-Public Types ----------------------------------------------------------
+
+data Moonshine = M [(ByteString, Snap ())]
+
+
 -- Public Functions -----------------------------------------------------------
 
 {- |
   Run a snap web service in the moonshine framework.
 -}
-runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Snap ()) -> IO ()
+runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Moonshine) -> IO ()
 runMoonshine init = do
   createDirectoryIfMissing True "log"
   let configPath = "config.yml"
   config <- loadConfig configPath
   whenMaybe (getLoggingConfig config) setupLogging
-  quickHttpServe (init config)
+  metricsServer <- forkServer "localhost" 8001
+  let M routes = init config
+  (quickHttpServe . Snap.route) =<< mapM (monitorRoute metricsServer) routes
+
+  where
+    monitorRoute :: Server -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
+    monitorRoute server (path, snap) = do -- IO monad
+      timer <- getDistribution (decodeUtf8 path) server
+      return (path, monitoredRoute timer snap)
+      
+    monitoredRoute :: Distribution -> Snap () -> Snap ()
+    monitoredRoute timer snap = do -- snap monad
+      start <- liftIO getCurrentTime
+      result <- snap
+      end <- liftIO getCurrentTime
+      addTiming timer start end
+      return result
+      where
+        addTiming timer start end = liftIO $
+          D.add timer diff
+          where
+            diff = toDouble (diffUTCTime end start)
+            toDouble = fromRational . toRational
 
 
 {- |
@@ -39,14 +70,16 @@ loadConfig :: FromJSON a => FilePath -> IO a
 loadConfig path = do
   eConfig <- decodeFileEither path
   case eConfig of
-    Left errorMsg -> error $ "Couldn't decode YAML config from file " ++ path ++ ": " ++ (show errorMsg)
+    Left errorMsg -> error $ "Couldn't decode YAML config from file " ++ path ++ ": " ++ show errorMsg
     Right config -> return config
+
 
 {- |
   A version of `Snap.route` that automatically sets up metrics for the specified routes.
 -}
-route :: MonadSnap m => [(ByteString, m a)] -> m a
-route = Snap.route
+route :: [(ByteString, Snap ())] -> Moonshine
+route = M
+
 
 {- |
   Logging configuration that Moonshine should use to initialize logging.
