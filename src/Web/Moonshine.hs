@@ -4,6 +4,7 @@ module Web.Moonshine (
 ) where
 
 import Data.ByteString (ByteString)
+import System.Directory (createDirectoryIfMissing)
 import Snap (Snap, quickHttpServe, MonadSnap)
 import Data.Yaml (FromJSON, decodeFileEither)
 import qualified Snap (route)
@@ -17,6 +18,7 @@ import qualified Snap (route)
 -}
 runMoonshine :: FromJSON a => (a -> Snap ()) -> IO ()
 runMoonshine init = do
+  createDirectoryIfMissing True "log"
   let configPath = "config.yml"
   config <- loadConfig configPath
   quickHttpServe (init config)
