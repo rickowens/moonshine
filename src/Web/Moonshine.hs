@@ -5,6 +5,7 @@ module Web.Moonshine (
 
 import Data.ByteString (ByteString)
 import Snap (Snap, quickHttpServe, MonadSnap)
+import qualified Snap (route)
 
 -- Public Types ---------------------------------------------------------------
 -- Semi-Public Types ----------------------------------------------------------
@@ -21,7 +22,7 @@ runMoonshine = quickHttpServe
   A version of `Snap.route` that autmatically sets up metrics for the specified routs.
 -}
 route :: MonadSnap m => [(ByteString, m a)] -> m a
-route = error "implement me"
+route = Snap.route
 
 -- Private Types --------------------------------------------------------------
 -- Private Functions ----------------------------------------------------------
