@@ -70,17 +70,6 @@ runMoonshine init = do
 
 
 {- |
-  Load the configuration from YAML.
--}
-loadConfig :: FromJSON a => FilePath -> IO a
-loadConfig path = do
-  eConfig <- decodeFileEither path
-  case eConfig of
-    Left errorMsg -> error $ "Couldn't decode YAML config from file " ++ path ++ ": " ++ show errorMsg
-    Right config -> return config
-
-
-{- |
   A version of `Snap.route` that automatically sets up metrics for the specified routes.
 -}
 route :: [(ByteString, Snap ())] -> Moonshine
@@ -141,3 +130,14 @@ whenMaybe (Just a) f = f a
 -}
 setupLogging :: LoggingConfig -> IO ()
 setupLogging loggingConfig = putStrLn "FIXME: setting up logging somehow"
+
+
+{- |
+  Load the configuration from YAML.
+-}
+loadConfig :: FromJSON a => FilePath -> IO a
+loadConfig path = do
+  eConfig <- decodeFileEither path
+  case eConfig of
+    Left errorMsg -> error $ "Couldn't decode YAML config from file " ++ path ++ ": " ++ (show errorMsg)
+    Right config -> return config
