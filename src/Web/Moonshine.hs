@@ -33,7 +33,7 @@ loadConfig path = do
     Right config -> return config
 
 {- |
-  A version of `Snap.route` that autmatically sets up metrics for the specified routs.
+  A version of `Snap.route` that automatically sets up metrics for the specified routes.
 -}
 route :: MonadSnap m => [(ByteString, m a)] -> m a
 route = Snap.route
