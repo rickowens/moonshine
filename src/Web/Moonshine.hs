@@ -14,8 +14,10 @@ import qualified Snap (route)
 {- |
   Run a snap web service in the moonshine framework.
 -}
-runMoonshine :: Snap () -> IO ()
-runMoonshine = quickHttpServe
+runMoonshine :: (a -> Snap ()) -> IO ()
+runMoonshine init =
+  let config = undefined in
+  quickHttpServe (init config)
 
 
 {- |
