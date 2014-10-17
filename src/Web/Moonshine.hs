@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
 module Web.Moonshine (
+  Moonshine,
   LoggingConfig(), HasLoggingConfig(..),
   runMoonshine,
   route
