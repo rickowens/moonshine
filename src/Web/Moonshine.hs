@@ -1,5 +1,6 @@
 module Web.Moonshine (
-  runMoonshine
+  runMoonshine,
+  route
 ) where
 
 import Data.ByteString (ByteString)
