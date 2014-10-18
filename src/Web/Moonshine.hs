@@ -73,6 +73,7 @@ instance FromJSON LogPriority where
 
 {- |
   Run a `Moonshine` value that was generated from a user-defined configuration.
+  This function never returns.
 -}
 runMoonshine :: (FromJSON userconfig) => (userconfig -> Moonshine) -> IO ()
 runMoonshine initialize = do
