@@ -134,15 +134,21 @@ instance FromJSON SystemConfig where
 
 -- Private Functions ----------------------------------------------------------
 
+setupLogging :: SystemConfig -> IO ()
+setupLogging SystemConfig {logging} = installLoggingConfig (fromMaybe defaultLoggingConfig logging)
+
+defaultLoggingConfig = LoggingConfig {
+  level = LP Info
+  }
+
 {- |
   Do all of the things that it takes to get logging set up the way we
   want it.
 -}
-setupLogging :: SystemConfig -> IO ()
-setupLogging SystemConfig {logging = Nothing} =
-  createDirectoryIfMissing True "log"
-setupLogging SystemConfig {logging = Just _loggingConfig} =
+installLoggingConfig :: LoggingConfig -> IO ()
+installLoggingConfig loggingConfig = do
   -- FIXME
+  createDirectoryIfMissing True "log"
   putStrLn "FIXME: setting up logging somehow"
 
 
