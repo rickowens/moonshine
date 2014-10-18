@@ -23,7 +23,7 @@ library
   other-extensions:  DeriveGeneric
   build-depends:
     aeson,
-    base >=4.7 && <4.8,
+    base,
     bytestring,
     directory,
     ekg,
