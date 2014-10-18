@@ -137,6 +137,7 @@ instance FromJSON SystemConfig where
 setupLogging :: SystemConfig -> IO ()
 setupLogging SystemConfig {logging} = installLoggingConfig (fromMaybe defaultLoggingConfig logging)
 
+defaultLoggingConfig :: LoggingConfig
 defaultLoggingConfig = LoggingConfig {
   level = LP Info
   }
