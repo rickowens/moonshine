@@ -6,6 +6,7 @@ module Web.Moonshine (
   route
 ) where
 
+import Control.Applicative (liftA2)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
@@ -153,11 +154,12 @@ configPath = "config.yml"
 -}
 loadConfig :: FromJSON a => FilePath -> IO (a, SystemConfig)
 loadConfig path = do
-  eConfig <- decodeFileEither path
-  case eConfig of
+  eUserConfig <- decodeFileEither path
+  eSystemConfig <- decodeFileEither path
+  case liftA2 (,) eUserConfig eSystemConfig of
     Left errorMsg -> error $
       "Couldn't decode YAML config from file "
       ++ path ++ ": " ++ show errorMsg
-    Right config -> return config
+    Right configs -> return configs
 
 
