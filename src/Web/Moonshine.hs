@@ -86,10 +86,8 @@ instance FromJSON Priority where
 -}
 runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Moonshine) -> IO ()
 runMoonshine init = do
-  createDirectoryIfMissing True "log"
-  let configPath = "config.yml"
   config <- loadConfig configPath
-  whenMaybe (getLoggingConfig config) setupLogging
+  setupLogging config
   metricsServer <- forkServer "localhost" 8001
   let M routes = init config
   (quickHttpServe . Snap.route) =<< mapM (monitorRoute metricsServer) routes
@@ -134,11 +132,27 @@ whenMaybe :: Maybe a -> (a -> IO ()) -> IO ()
 whenMaybe Nothing _= return ()
 whenMaybe (Just a) f = f a
 
+
 {- |
-  FIXME
+  Do all of the things that it takes to get logging set up the way we
+  want it.
 -}
-setupLogging :: LoggingConfig -> IO ()
-setupLogging loggingConfig = putStrLn "FIXME: setting up logging somehow"
+setupLogging config = do
+  createDirectoryIfMissing True "log"
+  whenMaybe (getLoggingConfig config) configureLogging
+  where
+    {- |
+      FIXME
+    -}
+    configureLogging :: LoggingConfig -> IO ()
+    configureLogging loggingConfig =
+      putStrLn "FIXME: setting up logging somehow"
+
+
+{- |
+  hard coded config file path.
+-}
+configPath = "config.yml"
 
 
 {- |
