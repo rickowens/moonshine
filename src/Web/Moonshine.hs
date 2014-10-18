@@ -7,6 +7,7 @@ module Web.Moonshine (
 ) where
 
 import Control.Applicative (liftA2)
+import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
@@ -15,7 +16,8 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
 import Snap (Snap, quickHttpServe)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.IO (openFile, hGetContents, hClose, IOMode(..))
 import System.Log (Priority)
 import System.Metrics.Distribution (Distribution)
 import System.Remote.Monitoring (Server, forkServer, getDistribution)
@@ -74,6 +76,7 @@ instance FromJSON LogPriority where
 -}
 runMoonshine :: (FromJSON a) => (a -> Moonshine) -> IO ()
 runMoonshine initialize = do
+  printBanner
   (userConfig, systemConfig) <- loadConfig configPath
   setupLogging systemConfig
   metricsServer <- forkServer "0.0.0.0" 8001
@@ -163,3 +166,16 @@ loadConfig path = do
     Right configs -> return configs
 
 
+{- |
+  Find and output a banner.
+-}
+printBanner :: IO ()
+printBanner = do
+  exists <- doesFileExist filepath
+  when exists $ do
+    handle <- openFile filepath ReadMode
+    contents <- hGetContents handle
+    putStr contents
+    hClose handle
+  where
+    filepath = "lib/banner.txt"
