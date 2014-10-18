@@ -1,7 +1,8 @@
 {-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Web.Moonshine (
   Moonshine,
-  LoggingConfig,
+  LoggingConfig(..),
   HasLoggingConfig(..),
   runMoonshine,
   route
@@ -14,7 +15,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
-import Snap (Snap, quickHttpServe, MonadSnap)
+import Snap (Snap, quickHttpServe)
 import System.Directory (createDirectoryIfMissing)
 import System.Log (Priority)
 import System.Metrics.Distribution (Distribution)
@@ -85,11 +86,11 @@ instance FromJSON Priority where
   Run a `Moonshine` value that was generated from a user-defined configuration.
 -}
 runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Moonshine) -> IO ()
-runMoonshine init = do
+runMoonshine initialize = do
   config <- loadConfig configPath
   setupLogging config
   metricsServer <- forkServer "0.0.0.0" 8001
-  let M routes = init config
+  let M routes = initialize config
   (quickHttpServe . Snap.route) =<< mapM (monitorRoute metricsServer) routes
 
   where
@@ -103,10 +104,10 @@ runMoonshine init = do
       start <- liftIO getCurrentTime
       result <- snap
       end <- liftIO getCurrentTime
-      addTiming timer start end
+      addTiming start end
       return result
       where
-        addTiming timer start end = liftIO $
+        addTiming start end = liftIO $
           D.add timer diff
           where
             diff = toDouble (diffUTCTime end start)
@@ -137,6 +138,7 @@ whenMaybe (Just a) f = f a
   Do all of the things that it takes to get logging set up the way we
   want it.
 -}
+setupLogging :: HasLoggingConfig a => a -> IO ()
 setupLogging config = do
   createDirectoryIfMissing True "log"
   whenMaybe (getLoggingConfig config) configureLogging
@@ -145,13 +147,14 @@ setupLogging config = do
       FIXME
     -}
     configureLogging :: LoggingConfig -> IO ()
-    configureLogging loggingConfig =
+    configureLogging _loggingConfig =
       putStrLn "FIXME: setting up logging somehow"
 
 
 {- |
   hard coded config file path.
 -}
+configPath :: FilePath
 configPath = "config.yml"
 
 
