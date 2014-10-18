@@ -12,11 +12,12 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
+import Data.Monoid (mempty)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
-import Snap (Snap, quickHttpServe)
+import Snap (Snap, quickHttpServe, httpServe, setPort)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.IO (readFile)
 import System.Log (Priority(..))
@@ -57,6 +58,25 @@ data LoggingConfig =
 
 instance FromJSON LoggingConfig
 
+data ServerConfig =
+  ServerConfig {
+    applicationConnector :: [ConnectorConfig]
+  , adminConnector :: [ConnectorConfig]
+  } deriving (Generic)
+
+instance FromJSON ServerConfig
+
+data ConnectorConfig = ConnectorConfig {
+    scheme :: Scheme
+  , port :: Int
+  } deriving (Generic)
+
+instance FromJSON ConnectorConfig
+
+data Scheme = HTTP | HTTPS
+  deriving (Generic)
+
+instance FromJSON Scheme
 
 {- |
   A wrapper for Priority, so we can avoid orphan instances
@@ -83,7 +103,7 @@ runMoonshine initialize = do
   setupLogging systemConfig
   metricsServer <- forkServer "0.0.0.0" 8001
   let M routes = initialize userConfig
-  (quickHttpServe . Snap.route) =<< mapM (monitorRoute metricsServer) routes
+  (serve systemConfig . Snap.route) =<< mapM (monitorRoute metricsServer) routes
 
   where
     monitorRoute :: Server -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
@@ -105,6 +125,11 @@ runMoonshine initialize = do
             diff = toDouble (diffUTCTime end start)
             toDouble = fromRational . toRational
 
+    serve SystemConfig { server = Just ServerConfig { applicationConnector = [ConnectorConfig { scheme=HTTP, port }] } } =
+      httpServe $ (setPort port) mempty
+
+    serve _ = quickHttpServe
+
 
 {- |
   Like `Snap.route`, but that automatically sets up metrics for the
@@ -123,12 +148,14 @@ route = M
 data SystemConfig =
   SystemConfig {
     logging :: Maybe LoggingConfig
+  , server :: Maybe ServerConfig
   }
 
 instance FromJSON SystemConfig where
   parseJSON (Object topLevel) = do
     logging <- topLevel .:? "logging"
-    return SystemConfig {logging}
+    server <- topLevel .:? "server"
+    return SystemConfig {logging, server}
   parseJSON value =
     fail $ "Couldn't parse system config from value " ++ show value
 
