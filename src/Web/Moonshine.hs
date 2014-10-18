@@ -88,7 +88,7 @@ runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Moonshine) -> IO ()
 runMoonshine init = do
   config <- loadConfig configPath
   setupLogging config
-  metricsServer <- forkServer "localhost" 8001
+  metricsServer <- forkServer "0.0.0.0" 8001
   let M routes = init config
   (quickHttpServe . Snap.route) =<< mapM (monitorRoute metricsServer) routes
 
