@@ -1,14 +1,13 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, NamedFieldPuns #-}
 module Web.Moonshine (
   Moonshine,
   LoggingConfig(..),
-  HasLoggingConfig(..),
   runMoonshine,
   route
 ) where
 
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (Value(..))
+import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
@@ -24,25 +23,6 @@ import qualified Snap (route)
 import qualified System.Metrics.Distribution as D (add)
 
 -- Public Types ---------------------------------------------------------------
-
-{- |
-  Your Config type must be an instance of HasLoggingConfig.
--}
-class HasLoggingConfig a where
-  {- |
-    Extract the LoggingConfig from your config type.
-
-    This can be Nothing if your application allows an empty or absent
-    logging config; in this case, Moonshine will set up some sensible
-    defaults.
-
-    See sunrise for an example of an application that does NOT support
-    an absent logging config.
-  -}
-  getLoggingConfig :: a -> Maybe LoggingConfig
-  getLoggingConfig _ = Nothing
-
-
 -- Semi-Public Types ----------------------------------------------------------
 
 {- |
@@ -91,12 +71,12 @@ instance FromJSON LogPriority where
 {- |
   Run a `Moonshine` value that was generated from a user-defined configuration.
 -}
-runMoonshine :: (FromJSON a, HasLoggingConfig a) => (a -> Moonshine) -> IO ()
+runMoonshine :: (FromJSON a) => (a -> Moonshine) -> IO ()
 runMoonshine initialize = do
-  config <- loadConfig configPath
-  setupLogging config
+  (userConfig, systemConfig) <- loadConfig configPath
+  setupLogging systemConfig
   metricsServer <- forkServer "0.0.0.0" 8001
-  let M routes = initialize config
+  let M routes = initialize userConfig
   (quickHttpServe . Snap.route) =<< mapM (monitorRoute metricsServer) routes
 
   where
@@ -129,32 +109,36 @@ route = M
 
 
 -- Private Types --------------------------------------------------------------
--- Private Functions ----------------------------------------------------------
 
 {- |
-  Conditionally execute an action depending on the value of the Maybe.
-  This is like the "when" from Control.Monad, combined with pattern matching.
+  Defines all the "system" config, where "system" means everything that
+  Moonshine knows about.
 -}
-whenMaybe :: Maybe a -> (a -> IO ()) -> IO ()
-whenMaybe Nothing _= return ()
-whenMaybe (Just a) f = f a
+data SystemConfig =
+  SystemConfig {
+    logging :: Maybe LoggingConfig
+  }
 
+instance FromJSON SystemConfig where
+  parseJSON (Object topLevel) = do
+    logging <- topLevel .:? "logging"
+    return SystemConfig {logging}
+  parseJSON value =
+    fail $ "Couldn't parse system config from value " ++ show value
+
+
+-- Private Functions ----------------------------------------------------------
 
 {- |
   Do all of the things that it takes to get logging set up the way we
   want it.
 -}
-setupLogging :: HasLoggingConfig a => a -> IO ()
-setupLogging config = do
+setupLogging :: SystemConfig -> IO ()
+setupLogging SystemConfig {logging = Nothing} =
   createDirectoryIfMissing True "log"
-  whenMaybe (getLoggingConfig config) configureLogging
-  where
-    {- |
-      FIXME
-    -}
-    configureLogging :: LoggingConfig -> IO ()
-    configureLogging _loggingConfig =
-      putStrLn "FIXME: setting up logging somehow"
+setupLogging SystemConfig {logging = Just _loggingConfig} =
+  -- FIXME
+  putStrLn "FIXME: setting up logging somehow"
 
 
 {- |
@@ -167,7 +151,7 @@ configPath = "config.yml"
 {- |
   Load the configuration from YAML.
 -}
-loadConfig :: FromJSON a => FilePath -> IO a
+loadConfig :: FromJSON a => FilePath -> IO (a, SystemConfig)
 loadConfig path = do
   eConfig <- decodeFileEither path
   case eConfig of
