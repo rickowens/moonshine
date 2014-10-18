@@ -84,7 +84,7 @@ runMoonshine initialize = do
     monitorRoute server (path, snap) = do -- IO monad
       timer <- getDistribution (decodeUtf8 path) server
       return (path, monitoredRoute timer snap)
-      
+
     monitoredRoute :: Distribution -> Snap () -> Snap ()
     monitoredRoute timer snap = do -- snap monad
       start <- liftIO getCurrentTime
