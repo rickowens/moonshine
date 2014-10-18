@@ -11,6 +11,7 @@ import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
+import Data.Maybe (fromMaybe)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
@@ -18,7 +19,7 @@ import GHC.Generics (Generic)
 import Snap (Snap, quickHttpServe)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.IO (openFile, hGetContents, hClose, IOMode(..))
-import System.Log (Priority)
+import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
 import System.Remote.Monitoring (Server, forkServer, getDistribution)
 import qualified Data.Text as T
@@ -139,7 +140,7 @@ setupLogging SystemConfig {logging} = installLoggingConfig (fromMaybe defaultLog
 
 defaultLoggingConfig :: LoggingConfig
 defaultLoggingConfig = LoggingConfig {
-  level = LP Info
+  level = LP INFO
   }
 
 {- |
