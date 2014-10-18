@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Web.Moonshine (
   Moonshine,
   LoggingConfig(..),
@@ -69,13 +68,20 @@ data Moonshine = M [(ByteString, Snap ())]
 -}
 data LoggingConfig =
   LoggingConfig {
-    level :: Priority
+    level :: LogPriority
   } deriving (Generic)
 
 instance FromJSON LoggingConfig
-instance FromJSON Priority where
+
+
+{- |
+  A wrapper for Priority, so we can avoid orphan instances
+-}
+newtype LogPriority = LP Priority
+
+instance FromJSON LogPriority where
   parseJSON (String s) = case reads (T.unpack s) of
-    [(priority, "")] -> return priority
+    [(priority, "")] -> return (LP priority)
     _ -> fail $ "couldn't parse Priority from string " ++ show s
   parseJSON value = fail $ "Couldn't parse Priority from value " ++ show value
 
