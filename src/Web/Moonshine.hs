@@ -74,7 +74,7 @@ instance FromJSON LogPriority where
 {- |
   Run a `Moonshine` value that was generated from a user-defined configuration.
 -}
-runMoonshine :: (FromJSON a) => (a -> Moonshine) -> IO ()
+runMoonshine :: (FromJSON userconfig) => (userconfig -> Moonshine) -> IO ()
 runMoonshine initialize = do
   printBanner
   (userConfig, systemConfig) <- loadConfig configPath
