@@ -18,7 +18,7 @@ import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
 import Snap (Snap, quickHttpServe)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import System.IO (openFile, hGetContents, hClose, IOMode(..))
+import System.IO (readFile)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
 import System.Remote.Monitoring (Server, forkServer, getDistribution)
@@ -181,10 +181,9 @@ loadConfig path = do
 printBanner :: IO ()
 printBanner = do
   exists <- doesFileExist filepath
-  when exists $ do
-    handle <- openFile filepath ReadMode
-    contents <- hGetContents handle
-    putStr contents
-    hClose handle
+  banner <- if exists
+            then readFile filepath
+            else return $ "FIXME: missing " ++ filepath ++ ".  son, I am disappoint\n"
+  putStr banner
   where
     filepath = "lib/banner.txt"
