@@ -38,3 +38,4 @@ library
   default-language:    Haskell2010
   -- ghc-options: -fwarn-unused-imports -Wall
   --   -fno-warn-unused-do-bind -Werror
+
