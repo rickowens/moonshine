@@ -11,7 +11,6 @@ module Web.Moonshine (
 ) where
 
 import Control.Applicative (liftA2)
-import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
@@ -249,9 +248,6 @@ startServer ServerConfig { applicationConnector, adminConnector } metricsStore (
   mapM_ startMetricsServer adminConnector
   routesWithMetrics <- mapM (monitorRoute metricsStore) routes
   httpServe snapConfig (Snap.route routesWithMetrics)
-
-  -- block forever, since servers are in other threads
-  sequence_ (repeat $ threadDelay 1000000)
 
   where
     monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
