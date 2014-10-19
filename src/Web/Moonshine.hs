@@ -20,7 +20,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
-import Snap (Snap, quickHttpServe, httpServe, setPort, Config, setSSLCert, setSSLKey, setSSLPort)
+import Snap (Snap, httpServe, setPort, Config, setSSLCert, setSSLKey, setSSLPort)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
@@ -247,6 +247,7 @@ defaultLoggingConfig = LoggingConfig {
   level = LP INFO
   }
 
+defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
     adminConnector = [ConnectorConfig {scheme=HTTP, port=8001, cert=Nothing, key=Nothing}]
   , applicationConnector = [ConnectorConfig {scheme=HTTP, port=8000, cert=Nothing, key=Nothing}]
@@ -302,7 +303,7 @@ printBanner = do
   A replacement for 'System.Remote.Monitoring.getDistribution' that uses an 'EkgMetrics.Store' instead of a 'Server'.
 -}
 getDistribution :: T.Text -> EkgMetrics.Store -> IO Distribution
-getDistribution name store = EkgMetrics.createDistribution name store
+getDistribution = EkgMetrics.createDistribution
 
 {- |
   Start application listening on the ports given by the config.
@@ -321,9 +322,10 @@ startServer ServerConfig { applicationConnector, adminConnector } metricsStore s
     snapConfig = mconcat $ map toSnapConfig applicationConnector
     toSnapConfig :: ConnectorConfig -> Config m a
     toSnapConfig ConnectorConfig { scheme=HTTP, port } = setPort port mempty
-    toSnapConfig ConnectorConfig { scheme=HTTPS, port, cert=mcert, key=mkey } = case (do -- Maybe monad
-      cert <- mcert
-      key <- mkey
-      return $ setSSLCert cert $ setSSLKey key $ setSSLPort port $ mempty) of
-         Nothing -> error "You must provide cert and key in order to use HTTPS."
-         Just config -> config
+    toSnapConfig ConnectorConfig { scheme=HTTPS, port, cert=mcert, key=mkey } =
+      fromMaybe
+        (error "You must provide cert and key in order to use HTTPS.")
+        $ do -- Maybe monad
+          cert <- mcert
+          key <- mkey
+          return $ setSSLCert cert $ setSSLKey key $ setSSLPort port mempty
