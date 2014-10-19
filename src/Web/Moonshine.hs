@@ -21,7 +21,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
-import Snap (Snap, quickHttpServe, httpServe, setPort, Config)
+import Snap (Snap, quickHttpServe, httpServe, setPort, Config, setSSLCert, setSSLKey, setSSLPort)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
@@ -87,6 +87,8 @@ instance FromJSON ServerConfig
 data ConnectorConfig = ConnectorConfig {
     scheme :: Scheme
   , port :: Int
+  , cert :: Maybe FilePath
+  , key :: Maybe FilePath
   } deriving (Generic)
 
 instance FromJSON ConnectorConfig
@@ -183,8 +185,8 @@ defaultLoggingConfig = LoggingConfig {
   }
 
 defaultServerConfig = ServerConfig {
-    adminConnector = [ConnectorConfig {scheme=HTTP, port=8001}]
-  , applicationConnector = [ConnectorConfig {scheme=HTTP, port=8000}]
+    adminConnector = [ConnectorConfig {scheme=HTTP, port=8001, cert=Nothing, key=Nothing}]
+  , applicationConnector = [ConnectorConfig {scheme=HTTP, port=8000, cert=Nothing, key=Nothing}]
   }
 
 {- |
@@ -279,5 +281,9 @@ startServer ServerConfig { applicationConnector, adminConnector } metricsStore (
     snapConfig = mconcat $ map toSnapConfig applicationConnector
     toSnapConfig :: ConnectorConfig -> Config m a
     toSnapConfig ConnectorConfig { scheme=HTTP, port } = setPort port mempty
-    toSnapConfig ConnectorConfig { scheme=HTTPS } = error "HTTPS is not supported yet"
-
+    toSnapConfig ConnectorConfig { scheme=HTTPS, port, cert=mcert, key=mkey } = case (do -- Maybe monad
+      cert <- mcert
+      key <- mkey
+      return $ setSSLCert cert $ setSSLKey key $ setSSLPort port $ mempty) of
+         Nothing -> error "You must provide cert and key in order to use HTTPS."
+         Just config -> config
