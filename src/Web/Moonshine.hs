@@ -7,11 +7,11 @@ module Web.Moonshine (
   makeTimer,
   timerAdd,
   Timer,
-  MetricsServer
+  getUserConfig
 ) where
 
-import Control.Applicative (liftA2)
-import Control.Monad.IO.Class (liftIO)
+import Control.Applicative (liftA2, Applicative(pure, (<*>)))
+import Control.Monad.IO.Class (MonadIO(liftIO))
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
@@ -34,23 +34,39 @@ import qualified System.Metrics.Distribution as D (add)
 -- Semi-Public Types ----------------------------------------------------------
 
 {- |
-  This type is the type of things that can be run by the moonshine framework.
-  Generate values of this type using `route`, and run the value as a web
-  service using `runMoonshine`.
+  The moonshine monad.
 -}
-data Moonshine = M [(ByteString, Snap ())]
+data Moonshine config a = Moonshine (State config -> IO (State config, a))
+
+instance Monad (Moonshine config) where
+  return a = Moonshine (\state -> return (state, a))
+  (Moonshine m) >>= fun = Moonshine $ \state -> do
+    (newState, val) <- m state
+    let Moonshine m2 = fun val
+    m2 newState
+        
+instance Applicative (Moonshine config) where
+  pure = return
+  f <*> m = do
+    fun <- f
+    val <- m
+    return (fun val)
+
+instance Functor (Moonshine config) where
+  fmap fun m = do
+    val <- m
+    return (fun val)
+
+instance MonadIO (Moonshine config) where
+  liftIO io = Moonshine $ \state -> do
+    val <- io
+    return (state, val)
 
 
 {- |
   The Timer type.
 -}
 newtype Timer = T Distribution
-
-
-{- |
-  The metrics server
--}
-newtype MetricsServer = Metrics EkgMetrics.Store
 
 
 {- |
@@ -116,45 +132,78 @@ instance FromJSON LogPriority where
 -- Public Functions -----------------------------------------------------------
 
 {- |
-  Run a `Moonshine` value that was generated from a user-defined configuration.
-  This function never returns.
+  Execute an insance of the Moonshine monad. This starts up a server
+  and never returns.
 -}
-runMoonshine
-  :: (FromJSON userconfig)
-  => (userconfig -> MetricsServer -> IO Moonshine)
-  -> IO ()
-runMoonshine initialize = do
+runMoonshine :: (FromJSON config) => Moonshine config a -> IO a
+runMoonshine (Moonshine m) = do
   printBanner
   (userConfig, systemConfig) <- loadConfig configPath
   setupLogging systemConfig
   metricsStore <- EkgMetrics.newStore
-  initialize userConfig (Metrics metricsStore) >>= startServer (serverConfig systemConfig) metricsStore
+  (State {snap}, val) <- m State {userConfig, snap = return (), metricsStore}
+  startServer (serverConfig systemConfig) metricsStore snap
+  return val
   where
     serverConfig SystemConfig { server = mServerConfig } = fromMaybe defaultServerConfig mServerConfig
+
+
+{- |
+  Returns the user config.
+-}
+getUserConfig :: Moonshine config config
+getUserConfig = Moonshine (\state@State {userConfig} ->
+    return (state, userConfig)
+  )
 
 
 {- |
   Like `Snap.route`, but that automatically sets up metrics for the
   specified routes.
 -}
-route :: [(ByteString, Snap ())] -> Moonshine
-route = M
+route :: [(ByteString, Snap ())] -> Moonshine config ()
+route routes = Moonshine (\state@State {snap, metricsStore} -> do
+    monitoredRoutes <- mapM (monitorRoute metricsStore) routes
+    return (state {snap = snap >> Snap.route monitoredRoutes}, ())
+  )
+  where
+    monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
+    monitorRoute metricsStore (path, snap) = do -- IO monad
+      timer <- getDistribution (decodeUtf8 path) metricsStore
+      return (path, monitoredRoute timer snap)
+
+    monitoredRoute :: Distribution -> Snap () -> Snap ()
+    monitoredRoute timer snap = do -- snap monad
+      start <- liftIO getCurrentTime
+      result <- snap
+      end <- liftIO getCurrentTime
+      addTiming start end
+      return result
+      where
+        addTiming start end = liftIO $
+          D.add timer diff
+          where
+            diff = toDouble (diffUTCTime end start)
+            toDouble = fromRational . toRational
 
 
 {- |
   Make a new timer with the given name.
 -}
-makeTimer :: T.Text -> MetricsServer -> IO Timer
-makeTimer name (Metrics store) = do
-  dist <- getDistribution name store
-  return (T dist)
+makeTimer :: T.Text -> Moonshine config Timer
+makeTimer name = Moonshine (\state@State {metricsStore} -> do
+    dist <- getDistribution name metricsStore
+    return (state, T dist)
+  )
 
 
 {- |
   Add a time to a timer.
 -}
-timerAdd :: Timer -> Double -> IO ()
-timerAdd (T timer) = D.add timer
+-- timerAdd :: (Real time) => Timer -> time -> Moonshine config ()
+timerAdd :: (Real time) => Timer -> time -> IO ()
+timerAdd (T timer) = D.add timer . fromRational . toRational
+
 
 -- Private Types --------------------------------------------------------------
 
@@ -175,6 +224,17 @@ instance FromJSON SystemConfig where
     return SystemConfig {logging, server}
   parseJSON value =
     fail $ "Couldn't parse system config from value " ++ show value
+
+
+{- |
+  The internal running state used while executing the `Moonshine` monad.
+-}
+data State config =
+  State {
+    userConfig :: config,
+    snap :: Snap (),
+    metricsStore :: EkgMetrics.Store
+  }
 
 
 -- Private Functions ----------------------------------------------------------
@@ -247,32 +307,12 @@ getDistribution name store = EkgMetrics.createDistribution name store
 {- |
   Start application listening on the ports given by the config.
 -}
-startServer :: ServerConfig -> EkgMetrics.Store -> Moonshine -> IO ()
-startServer ServerConfig { applicationConnector, adminConnector } metricsStore (M routes) = do
+startServer :: ServerConfig -> EkgMetrics.Store -> Snap () -> IO ()
+startServer ServerConfig { applicationConnector, adminConnector } metricsStore snap = do
   mapM_ startMetricsServer adminConnector
-  routesWithMetrics <- mapM (monitorRoute metricsStore) routes
-  httpServe snapConfig (Snap.route routesWithMetrics)
+  httpServe snapConfig snap
 
   where
-    monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
-    monitorRoute metricsStore (path, snap) = do -- IO monad
-      timer <- getDistribution (decodeUtf8 path) metricsStore
-      return (path, monitoredRoute timer snap)
-
-    monitoredRoute :: Distribution -> Snap () -> Snap ()
-    monitoredRoute timer snap = do -- snap monad
-      start <- liftIO getCurrentTime
-      result <- snap
-      end <- liftIO getCurrentTime
-      addTiming start end
-      return result
-      where
-        addTiming start end = liftIO $
-          D.add timer diff
-          where
-            diff = toDouble (diffUTCTime end start)
-            toDouble = fromRational . toRational
-
     startMetricsServer :: ConnectorConfig -> IO Server
     startMetricsServer ConnectorConfig { scheme=HTTP, port } = forkServerWith metricsStore "0.0.0.0" port
     startMetricsServer ConnectorConfig { scheme=HTTPS } = error "EKG does not support running on HTTPS"
