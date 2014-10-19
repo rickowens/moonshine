@@ -76,6 +76,8 @@ instance FromJSON LoggingConfig
 data ServerConfig =
   ServerConfig {
     applicationConnector :: [ConnectorConfig]
+    -- | Configuration for EKG.  Note that although this is a list, at present EKG makes it impossible to support more
+    -- than one server. See https://github.com/tibbe/ekg/issues/32.
   , adminConnector :: [ConnectorConfig]
   } deriving (Generic)
 
