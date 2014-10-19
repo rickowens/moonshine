@@ -11,6 +11,7 @@ module Web.Moonshine (
 ) where
 
 import Control.Applicative (liftA2, Applicative(pure, (<*>)))
+import Control.Monad (ap, liftM)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
@@ -47,15 +48,10 @@ instance Monad (Moonshine config) where
         
 instance Applicative (Moonshine config) where
   pure = return
-  f <*> m = do
-    fun <- f
-    val <- m
-    return (fun val)
+  (<*>) = ap
 
 instance Functor (Moonshine config) where
-  fmap fun m = do
-    val <- m
-    return (fun val)
+  fmap = liftM
 
 instance MonadIO (Moonshine config) where
   liftIO io = Moonshine $ \state -> do
