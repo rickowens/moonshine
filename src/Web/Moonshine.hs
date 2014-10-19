@@ -3,7 +3,10 @@ module Web.Moonshine (
   Moonshine,
   LoggingConfig(..),
   runMoonshine,
-  route
+  route,
+  makeTimer,
+  timerAdd,
+  Timer
 ) where
 
 import Control.Applicative (liftA2)
@@ -36,6 +39,18 @@ import qualified System.Metrics.Distribution as D (add)
   service using `runMoonshine`.
 -}
 data Moonshine = M [(ByteString, Snap ())]
+
+
+{- |
+  The Timer type.
+-}
+newtype Timer = T Distribution
+
+
+{- |
+  The metrics server
+-}
+newtype MetricsServer = Metrics Server
 
 
 {- |
@@ -96,13 +111,16 @@ instance FromJSON LogPriority where
   Run a `Moonshine` value that was generated from a user-defined configuration.
   This function never returns.
 -}
-runMoonshine :: (FromJSON userconfig) => (userconfig -> Moonshine) -> IO ()
+runMoonshine
+  :: (FromJSON userconfig)
+  => (userconfig -> MetricsServer -> IO Moonshine)
+  -> IO ()
 runMoonshine initialize = do
   printBanner
   (userConfig, systemConfig) <- loadConfig configPath
   setupLogging systemConfig
   metricsServer <- forkServer "0.0.0.0" 8001
-  let M routes = initialize userConfig
+  M routes <- initialize userConfig (Metrics metricsServer)
   (serve systemConfig . Snap.route) =<< mapM (monitorRoute metricsServer) routes
 
   where
@@ -138,6 +156,21 @@ runMoonshine initialize = do
 route :: [(ByteString, Snap ())] -> Moonshine
 route = M
 
+
+{- |
+  Make a new timer with the given name.
+-}
+makeTimer :: T.Text -> MetricsServer -> IO Timer
+makeTimer name (Metrics server) = do
+  dist <- getDistribution name server
+  return (T dist)
+
+
+{- |
+  Add a time to a timer.
+-}
+timerAdd :: Timer -> Double -> IO ()
+timerAdd (T timer) = D.add timer
 
 -- Private Types --------------------------------------------------------------
 
