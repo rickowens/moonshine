@@ -24,7 +24,7 @@ import Snap (Snap, quickHttpServe, httpServe, setPort)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
-import System.Remote.Monitoring (Server, forkServerWith, getDistribution)
+import System.Remote.Monitoring (Server, forkServerWith)
 import qualified Data.Text as T
 import qualified System.Metrics as EkgMetrics
 import qualified Snap (route)
@@ -50,7 +50,7 @@ newtype Timer = T Distribution
 {- |
   The metrics server
 -}
-newtype MetricsServer = Metrics Server
+newtype MetricsServer = Metrics EkgMetrics.Store
 
 
 {- |
@@ -121,13 +121,13 @@ runMoonshine initialize = do
   setupLogging systemConfig
   metricsStore <- EkgMetrics.newStore
   metricsServer <- forkServerWith metricsStore "0.0.0.0" 8001
-  M routes <- initialize userConfig (Metrics metricsServer)
-  (serve systemConfig . Snap.route) =<< mapM (monitorRoute metricsServer) routes
+  M routes <- initialize userConfig (Metrics metricsStore)
+  (serve systemConfig . Snap.route) =<< mapM (monitorRoute metricsStore) routes
 
   where
-    monitorRoute :: Server -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
-    monitorRoute server (path, snap) = do -- IO monad
-      timer <- getDistribution (decodeUtf8 path) server
+    monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
+    monitorRoute metricsStore (path, snap) = do -- IO monad
+      timer <- getDistribution (decodeUtf8 path) metricsStore
       return (path, monitoredRoute timer snap)
 
     monitoredRoute :: Distribution -> Snap () -> Snap ()
@@ -162,8 +162,8 @@ route = M
   Make a new timer with the given name.
 -}
 makeTimer :: T.Text -> MetricsServer -> IO Timer
-makeTimer name (Metrics server) = do
-  dist <- getDistribution name server
+makeTimer name (Metrics store) = do
+  dist <- getDistribution name store
   return (T dist)
 
 
@@ -248,3 +248,10 @@ printBanner = do
   putStr banner
   where
     filepath = "lib/banner.txt"
+
+
+{- |
+  A replacement for 'System.Remote.Monitoring.getDistribution' that uses an 'EkgMetrics.Store' instead of a 'Server'.
+-}
+getDistribution :: T.Text -> EkgMetrics.Store -> IO Distribution
+getDistribution name store = EkgMetrics.createDistribution name store
