@@ -45,7 +45,7 @@ instance Monad (Moonshine config) where
     (newState, val) <- m state
     let Moonshine m2 = fun val
     m2 newState
-        
+
 instance Applicative (Moonshine config) where
   pure = return
   (<*>) = ap
