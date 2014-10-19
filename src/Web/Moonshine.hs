@@ -143,7 +143,7 @@ runMoonshine initialize = do
             toDouble = fromRational . toRational
 
     serve SystemConfig { server = Just ServerConfig { applicationConnector = [ConnectorConfig { scheme=HTTP, port }] } } =
-      httpServe $ (setPort port) mempty
+      httpServe $ setPort port mempty
 
     serve _ = quickHttpServe
 
