@@ -127,44 +127,6 @@ runMoonshine initialize = do
   where
     serverConfig SystemConfig { server = mServerConfig } = fromMaybe defaultServerConfig mServerConfig
 
-startServer :: ServerConfig -> EkgMetrics.Store -> Moonshine -> IO ()
-startServer ServerConfig { applicationConnector, adminConnector } metricsStore (M routes) = do
-  mapM_ startMetricsServer adminConnector
-  routesWithMetrics <- mapM (monitorRoute metricsStore) routes
-  mapM_ (serve $ Snap.route routesWithMetrics) applicationConnector
-
-  -- block forever, since servers are in other threads
-  sequence_ (repeat $ threadDelay 1000000)
-
-  where
-    monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
-    monitorRoute metricsStore (path, snap) = do -- IO monad
-      timer <- getDistribution (decodeUtf8 path) metricsStore
-      return (path, monitoredRoute timer snap)
-
-    monitoredRoute :: Distribution -> Snap () -> Snap ()
-    monitoredRoute timer snap = do -- snap monad
-      start <- liftIO getCurrentTime
-      result <- snap
-      end <- liftIO getCurrentTime
-      addTiming start end
-      return result
-      where
-        addTiming start end = liftIO $
-          D.add timer diff
-          where
-            diff = toDouble (diffUTCTime end start)
-            toDouble = fromRational . toRational
-
-    startMetricsServer :: ConnectorConfig -> IO Server
-    startMetricsServer ConnectorConfig { scheme=HTTP, port } = forkServerWith metricsStore "0.0.0.0" port
-    startMetricsServer ConnectorConfig { scheme=HTTPS } = error "EKG does not support running on HTTPS"
-
-    serve snap ConnectorConfig { scheme=HTTP, port } =
-      forkIO $ httpServe (setPort port mempty) snap
-    serve _ ConnectorConfig { scheme=HTTPS } =
-      error "HTTPS is not supported yet"
-
 
 {- |
   Like `Snap.route`, but that automatically sets up metrics for the
@@ -276,3 +238,44 @@ printBanner = do
 -}
 getDistribution :: T.Text -> EkgMetrics.Store -> IO Distribution
 getDistribution name store = EkgMetrics.createDistribution name store
+
+{- |
+  Start application listening on the ports given by the config.
+-}
+startServer :: ServerConfig -> EkgMetrics.Store -> Moonshine -> IO ()
+startServer ServerConfig { applicationConnector, adminConnector } metricsStore (M routes) = do
+  mapM_ startMetricsServer adminConnector
+  routesWithMetrics <- mapM (monitorRoute metricsStore) routes
+  mapM_ (serve $ Snap.route routesWithMetrics) applicationConnector
+
+  -- block forever, since servers are in other threads
+  sequence_ (repeat $ threadDelay 1000000)
+
+  where
+    monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
+    monitorRoute metricsStore (path, snap) = do -- IO monad
+      timer <- getDistribution (decodeUtf8 path) metricsStore
+      return (path, monitoredRoute timer snap)
+
+    monitoredRoute :: Distribution -> Snap () -> Snap ()
+    monitoredRoute timer snap = do -- snap monad
+      start <- liftIO getCurrentTime
+      result <- snap
+      end <- liftIO getCurrentTime
+      addTiming start end
+      return result
+      where
+        addTiming start end = liftIO $
+          D.add timer diff
+          where
+            diff = toDouble (diffUTCTime end start)
+            toDouble = fromRational . toRational
+
+    startMetricsServer :: ConnectorConfig -> IO Server
+    startMetricsServer ConnectorConfig { scheme=HTTP, port } = forkServerWith metricsStore "0.0.0.0" port
+    startMetricsServer ConnectorConfig { scheme=HTTPS } = error "EKG does not support running on HTTPS"
+
+    serve snap ConnectorConfig { scheme=HTTP, port } =
+      forkIO $ httpServe (setPort port mempty) snap
+    serve _ ConnectorConfig { scheme=HTTPS } =
+      error "HTTPS is not supported yet"
