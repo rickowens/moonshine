@@ -24,8 +24,9 @@ import Snap (Snap, quickHttpServe, httpServe, setPort)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
-import System.Remote.Monitoring (Server, forkServer, getDistribution)
+import System.Remote.Monitoring (Server, forkServerWith, getDistribution)
 import qualified Data.Text as T
+import qualified System.Metrics as EkgMetrics
 import qualified Snap (route)
 import qualified System.Metrics.Distribution as D (add)
 
@@ -118,7 +119,8 @@ runMoonshine initialize = do
   printBanner
   (userConfig, systemConfig) <- loadConfig configPath
   setupLogging systemConfig
-  metricsServer <- forkServer "0.0.0.0" 8001
+  metricsStore <- EkgMetrics.newStore
+  metricsServer <- forkServerWith metricsStore "0.0.0.0" 8001
   M routes <- initialize userConfig (Metrics metricsServer)
   (serve systemConfig . Snap.route) =<< mapM (monitorRoute metricsServer) routes
 
