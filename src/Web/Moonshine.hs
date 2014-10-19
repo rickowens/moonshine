@@ -16,12 +16,12 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
-import Data.Monoid (mempty)
+import Data.Monoid (mempty, mconcat)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
-import Snap (Snap, quickHttpServe, httpServe, setPort)
+import Snap (Snap, quickHttpServe, httpServe, setPort, Config)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
@@ -246,7 +246,7 @@ startServer :: ServerConfig -> EkgMetrics.Store -> Moonshine -> IO ()
 startServer ServerConfig { applicationConnector, adminConnector } metricsStore (M routes) = do
   mapM_ startMetricsServer adminConnector
   routesWithMetrics <- mapM (monitorRoute metricsStore) routes
-  mapM_ (serve $ Snap.route routesWithMetrics) applicationConnector
+  httpServe snapConfig (Snap.route routesWithMetrics)
 
   -- block forever, since servers are in other threads
   sequence_ (repeat $ threadDelay 1000000)
@@ -275,7 +275,9 @@ startServer ServerConfig { applicationConnector, adminConnector } metricsStore (
     startMetricsServer ConnectorConfig { scheme=HTTP, port } = forkServerWith metricsStore "0.0.0.0" port
     startMetricsServer ConnectorConfig { scheme=HTTPS } = error "EKG does not support running on HTTPS"
 
-    serve snap ConnectorConfig { scheme=HTTP, port } =
-      forkIO $ httpServe (setPort port mempty) snap
-    serve _ ConnectorConfig { scheme=HTTPS } =
-      error "HTTPS is not supported yet"
+    snapConfig :: Config m a
+    snapConfig = mconcat $ map toSnapConfig applicationConnector
+    toSnapConfig :: ConnectorConfig -> Config m a
+    toSnapConfig ConnectorConfig { scheme=HTTP, port } = setPort port mempty
+    toSnapConfig ConnectorConfig { scheme=HTTPS } = error "HTTPS is not supported yet"
+
