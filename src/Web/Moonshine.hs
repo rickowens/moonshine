@@ -11,6 +11,7 @@ module Web.Moonshine (
 ) where
 
 import Control.Applicative (liftA2)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
@@ -126,11 +127,14 @@ runMoonshine initialize = do
   where
     serverConfig SystemConfig { server = mServerConfig } = fromMaybe defaultServerConfig mServerConfig
 
-
 startServer :: ServerConfig -> EkgMetrics.Store -> Moonshine -> IO ()
 startServer ServerConfig { applicationConnector, adminConnector } metricsStore (M routes) = do
   mapM_ startMetricsServer adminConnector
-  (serve applicationConnector . Snap.route) =<< mapM (monitorRoute metricsStore) routes
+  routesWithMetrics <- mapM (monitorRoute metricsStore) routes
+  mapM_ (serve $ Snap.route routesWithMetrics) applicationConnector
+
+  -- block forever, since servers are in other threads
+  sequence_ (repeat $ threadDelay 1000000)
 
   where
     monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
@@ -156,10 +160,10 @@ startServer ServerConfig { applicationConnector, adminConnector } metricsStore (
     startMetricsServer ConnectorConfig { scheme=HTTP, port } = forkServerWith metricsStore "0.0.0.0" port
     startMetricsServer ConnectorConfig { scheme=HTTPS } = error "EKG does not support running on HTTPS"
 
-    serve [ConnectorConfig { scheme=HTTP, port }] =
-      httpServe $ setPort port mempty
-
-    serve _ = quickHttpServe
+    serve snap ConnectorConfig { scheme=HTTP, port } =
+      forkIO $ httpServe (setPort port mempty) snap
+    serve _ ConnectorConfig { scheme=HTTPS } =
+      error "HTTPS is not supported yet"
 
 
 {- |
