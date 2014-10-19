@@ -7,7 +7,8 @@ module Web.Moonshine (
   makeTimer,
   timerAdd,
   Timer,
-  getUserConfig
+  getUserConfig,
+  timed
 ) where
 
 import Control.Applicative (liftA2, Applicative(pure, (<*>)))
@@ -170,6 +171,35 @@ route routes = Moonshine (\state@State {snap, metricsStore} -> do
 
     monitoredRoute :: Distribution -> Snap () -> Snap ()
     monitoredRoute timer snap = do -- snap monad
+      start <- liftIO getCurrentTime
+      result <- snap
+      end <- liftIO getCurrentTime
+      addTiming start end
+      return result
+      where
+        addTiming start end = liftIO $
+          D.add timer diff
+          where
+            diff = toDouble (diffUTCTime end start)
+            toDouble = fromRational . toRational
+
+
+{- |
+  Wrap a `Moonshine` in a timer, so that timing data for invocations
+  will be logged to the metrics handler.
+-}
+timed
+  :: T.Text
+    -- ^ The name of the timer.
+  -> Moonshine config a
+    -- ^ The action to be wrapped.
+  -> Moonshine config a
+timed name (Moonshine m) = Moonshine $ \state@State {snap, metricsStore} -> do
+  timer <- getDistribution name metricsStore
+  m state {snap = timedSnap timer snap}
+  where
+    timedSnap :: Distribution -> Snap a -> Snap a
+    timedSnap timer snap = do -- snap monad
       start <- liftIO getCurrentTime
       result <- snap
       end <- liftIO getCurrentTime
