@@ -76,7 +76,7 @@ instance FromJSON LoggingConfig
 data ServerConfig =
   ServerConfig {
     applicationConnector :: [ConnectorConfig]
-  , _adminConnector :: [ConnectorConfig]
+  , adminConnector :: [ConnectorConfig]
   } deriving (Generic)
 
 instance FromJSON ServerConfig
@@ -120,9 +120,15 @@ runMoonshine initialize = do
   (userConfig, systemConfig) <- loadConfig configPath
   setupLogging systemConfig
   metricsStore <- EkgMetrics.newStore
-  metricsServer <- forkServerWith metricsStore "0.0.0.0" 8001
-  M routes <- initialize userConfig (Metrics metricsStore)
-  (serve systemConfig . Snap.route) =<< mapM (monitorRoute metricsStore) routes
+  initialize userConfig (Metrics metricsStore) >>= startServer (serverConfig systemConfig) metricsStore
+  where
+    serverConfig SystemConfig { server = mServerConfig } = fromMaybe defaultServerConfig mServerConfig
+
+
+startServer :: ServerConfig -> EkgMetrics.Store -> Moonshine -> IO ()
+startServer ServerConfig { applicationConnector, adminConnector } metricsStore (M routes) = do
+  mapM_ startMetricsServer adminConnector
+  (serve applicationConnector . Snap.route) =<< mapM (monitorRoute metricsStore) routes
 
   where
     monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
@@ -144,7 +150,11 @@ runMoonshine initialize = do
             diff = toDouble (diffUTCTime end start)
             toDouble = fromRational . toRational
 
-    serve SystemConfig { server = Just ServerConfig { applicationConnector = [ConnectorConfig { scheme=HTTP, port }] } } =
+    startMetricsServer :: ConnectorConfig -> IO Server
+    startMetricsServer ConnectorConfig { scheme=HTTP, port } = forkServerWith metricsStore "0.0.0.0" port
+    startMetricsServer ConnectorConfig { scheme=HTTPS } = error "EKG does not support running on HTTPS"
+
+    serve [ConnectorConfig { scheme=HTTP, port }] =
       httpServe $ setPort port mempty
 
     serve _ = quickHttpServe
@@ -202,6 +212,11 @@ setupLogging SystemConfig {logging} = installLoggingConfig (fromMaybe defaultLog
 defaultLoggingConfig :: LoggingConfig
 defaultLoggingConfig = LoggingConfig {
   level = LP INFO
+  }
+
+defaultServerConfig = ServerConfig {
+    adminConnector = [ConnectorConfig {scheme=HTTP, port=8001}]
+  , applicationConnector = [ConnectorConfig {scheme=HTTP, port=8000}]
   }
 
 {- |
