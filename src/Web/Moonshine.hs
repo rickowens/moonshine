@@ -11,7 +11,6 @@ module Web.Moonshine (
 ) where
 
 import Control.Applicative (liftA2)
-import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value(..), (.:?))
 import Data.ByteString (ByteString)
@@ -23,7 +22,6 @@ import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
 import Snap (Snap, quickHttpServe, httpServe, setPort)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import System.IO (readFile)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
 import System.Remote.Monitoring (Server, forkServer, getDistribution)
@@ -77,7 +75,7 @@ instance FromJSON LoggingConfig
 data ServerConfig =
   ServerConfig {
     applicationConnector :: [ConnectorConfig]
-  , adminConnector :: [ConnectorConfig]
+  , _adminConnector :: [ConnectorConfig]
   } deriving (Generic)
 
 instance FromJSON ServerConfig
@@ -209,7 +207,7 @@ defaultLoggingConfig = LoggingConfig {
   want it.
 -}
 installLoggingConfig :: LoggingConfig -> IO ()
-installLoggingConfig loggingConfig = do
+installLoggingConfig _loggingConfig = do
   -- FIXME
   createDirectoryIfMissing True "log"
   putStrLn "FIXME: setting up logging somehow"
