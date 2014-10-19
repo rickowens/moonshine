@@ -73,6 +73,7 @@ data LoggingConfig =
 
 instance FromJSON LoggingConfig
 
+
 data ServerConfig =
   ServerConfig {
     applicationConnector :: [ConnectorConfig]
@@ -83,6 +84,7 @@ data ServerConfig =
 
 instance FromJSON ServerConfig
 
+
 data ConnectorConfig = ConnectorConfig {
     scheme :: Scheme
   , port :: Int
@@ -92,10 +94,12 @@ data ConnectorConfig = ConnectorConfig {
 
 instance FromJSON ConnectorConfig
 
+
 data Scheme = HTTP | HTTPS
   deriving (Generic)
 
 instance FromJSON Scheme
+
 
 {- |
   A wrapper for Priority, so we can avoid orphan instances
