@@ -6,7 +6,8 @@ module Web.Moonshine (
   route,
   makeTimer,
   timerAdd,
-  Timer
+  Timer,
+  MetricsServer
 ) where
 
 import Control.Applicative (liftA2)
