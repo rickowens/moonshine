@@ -271,13 +271,6 @@ installLoggingConfig _loggingConfig = do
 
 
 {- |
-  hard coded config file path.
--}
-configPath :: FilePath
-configPath = "config.yml"
-
-
-{- |
   Load the configuration from YAML.
 -}
 loadConfig :: FromJSON a => FilePath -> IO (a, SystemConfig)
