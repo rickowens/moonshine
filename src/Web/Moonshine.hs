@@ -24,7 +24,10 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
 import Snap (Snap, httpServe, setPort, Config, setSSLCert, setSSLKey, setSSLPort)
+import System.Console.GetOpt(ArgOrder(..), ArgDescr(..), OptDescr(..), getOpt, usageInfo)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.Environment (getArgs, getProgName)
+import System.Exit (exitSuccess, exitFailure)
 import System.Log (Priority(..))
 import System.Metrics.Distribution (Distribution)
 import System.Remote.Monitoring (Server, forkServerWith)
@@ -135,6 +138,7 @@ instance FromJSON LogPriority where
 -}
 runMoonshine :: (FromJSON config) => Moonshine config a -> IO a
 runMoonshine (Moonshine m) = do
+  configPath <- parseOptions
   printBanner
   (userConfig, systemConfig) <- loadConfig configPath
   setupLogging systemConfig
@@ -231,6 +235,12 @@ instance FromJSON SystemConfig where
   parseJSON value =
     fail $ "Couldn't parse system config from value " ++ show value
 
+{- |
+  Defines command line options.
+-}
+data Opt = Help
+         | Config String
+         deriving Show
 
 {- |
   The internal running state used while executing the `Moonshine` monad.
@@ -296,6 +306,35 @@ printBanner = do
   putStr banner
   where
     filepath = "lib/banner.txt"
+
+
+{- |
+  Parse command line options.
+-}
+parseOptions :: IO String
+parseOptions = do
+  args <- getArgs
+  case getOpt Permute options args of
+    ([Config config], [], []) -> do
+                 return config
+    ([Help], [], []) -> do
+                 usage
+                 exitSuccess
+    (_, _, []) -> do
+                 usage
+                 exitFailure
+    (_, _, errors) -> do
+                 mapM putStr errors
+                 usage
+                 exitFailure
+  where
+    options =
+      [ Option ['c'] ["config"] (ReqArg Config "FILE") "specify configuration file"
+      , Option ['h'] ["help"]   (NoArg Help)           "display help and exit"
+      ]
+    usage = do
+      progName <- getProgName
+      putStr $ usageInfo ("Usage: " ++ progName ++ " -c FILE") options
 
 
 {- |
