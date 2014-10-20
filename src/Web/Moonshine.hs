@@ -8,7 +8,8 @@ module Web.Moonshine (
   timerAdd,
   Timer,
   getUserConfig,
-  timed
+  timed,
+  liftSnap
 ) where
 
 import Control.Applicative (liftA2, Applicative(pure, (<*>)))
@@ -159,10 +160,9 @@ getUserConfig = Moonshine (\state@State {userConfig} ->
   specified routes.
 -}
 route :: [(ByteString, Snap ())] -> Moonshine config ()
-route routes = Moonshine (\state@State {snap, metricsStore} -> do
-    monitoredRoutes <- mapM (monitorRoute metricsStore) routes
-    return (state {snap = snap >> Snap.route monitoredRoutes}, ())
-  )
+route routes = Moonshine $ \state@State {snap, metricsStore} -> do
+  monitoredRoutes <- mapM (monitorRoute metricsStore) routes
+  return (state {snap = snap >> Snap.route monitoredRoutes}, ())
   where
     monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
     monitorRoute metricsStore (path, snap) = do -- IO monad
@@ -182,6 +182,14 @@ route routes = Moonshine (\state@State {snap, metricsStore} -> do
           where
             diff = toDouble (diffUTCTime end start)
             toDouble = fromRational . toRational
+
+
+{- |
+  Lifts a snap action into a moonshine action.
+-}
+liftSnap :: Snap () -> Moonshine config ()
+liftSnap s = Moonshine $ \state@State {snap} ->
+  return (state {snap = snap >> s}, ())
 
 
 {- |
