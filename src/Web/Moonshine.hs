@@ -15,7 +15,7 @@ module Web.Moonshine (
 import Control.Applicative (liftA2, Applicative(pure, (<*>)))
 import Control.Monad (ap, liftM)
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Data.Aeson (Value(..), (.:?))
+import Data.Aeson (Value(String, Object), (.:?))
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (mempty, mconcat)
@@ -24,16 +24,17 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Data.Yaml (FromJSON(parseJSON), decodeFileEither)
 import GHC.Generics (Generic)
 import Snap (Snap, httpServe, setPort, Config, setSSLCert, setSSLKey, setSSLPort)
-import System.Console.GetOpt(ArgOrder(..), ArgDescr(..), OptDescr(..), getOpt, usageInfo)
+import System.Console.GetOpt(ArgOrder(Permute), ArgDescr(ReqArg, NoArg),
+  OptDescr(Option), getOpt, usageInfo)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Environment (getArgs, getProgName)
 import System.Exit (exitSuccess, exitFailure)
-import System.Log (Priority(..))
+import System.Log (Priority(INFO))
 import System.Metrics.Distribution (Distribution)
 import System.Remote.Monitoring (Server, forkServerWith)
 import qualified Data.Text as T
-import qualified System.Metrics as EkgMetrics
 import qualified Snap (route)
+import qualified System.Metrics as EkgMetrics
 import qualified System.Metrics.Distribution as D (add)
 
 -- Public Types ---------------------------------------------------------------
