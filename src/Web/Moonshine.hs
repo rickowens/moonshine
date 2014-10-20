@@ -167,21 +167,7 @@ route routes = Moonshine $ \state@State {snap, metricsStore} -> do
     monitorRoute :: EkgMetrics.Store -> (ByteString, Snap ()) -> IO (ByteString, Snap ())
     monitorRoute metricsStore (path, snap) = do -- IO monad
       timer <- getDistribution (decodeUtf8 path) metricsStore
-      return (path, monitoredRoute timer snap)
-
-    monitoredRoute :: Distribution -> Snap () -> Snap ()
-    monitoredRoute timer snap = do -- snap monad
-      start <- liftIO getCurrentTime
-      result <- snap
-      end <- liftIO getCurrentTime
-      addTiming start end
-      return result
-      where
-        addTiming start end = liftIO $
-          D.add timer diff
-          where
-            diff = toDouble (diffUTCTime end start)
-            toDouble = fromRational . toRational
+      return (path, timedSnap timer snap)
 
 
 {- |
@@ -205,20 +191,6 @@ timed
 timed name (Moonshine m) = Moonshine $ \state@State {snap, metricsStore} -> do
   timer <- getDistribution name metricsStore
   m state {snap = timedSnap timer snap}
-  where
-    timedSnap :: Distribution -> Snap a -> Snap a
-    timedSnap timer snap = do -- snap monad
-      start <- liftIO getCurrentTime
-      result <- snap
-      end <- liftIO getCurrentTime
-      addTiming start end
-      return result
-      where
-        addTiming start end = liftIO $
-          D.add timer diff
-          where
-            diff = toDouble (diffUTCTime end start)
-            toDouble = fromRational . toRational
 
 
 {- |
@@ -363,3 +335,23 @@ startServer ServerConfig { applicationConnector, adminConnector } metricsStore s
           cert <- mcert
           key <- mkey
           return $ setSSLCert cert $ setSSLKey key $ setSSLPort port mempty
+
+
+{- |
+  Add timing information to a snap action.
+-}
+timedSnap :: Distribution -> Snap () -> Snap ()
+timedSnap timer snap = do -- snap monad
+  start <- liftIO getCurrentTime
+  result <- snap
+  end <- liftIO getCurrentTime
+  addTiming start end
+  return result
+  where
+    addTiming start end = liftIO $
+      D.add timer diff
+      where
+        diff = toDouble (diffUTCTime end start)
+        toDouble = fromRational . toRational
+
+
