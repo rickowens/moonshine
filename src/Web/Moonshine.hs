@@ -316,9 +316,9 @@ parseOptions :: IO String
 parseOptions = do
   args <- getArgs
   case getOpt Permute options args of
-    ([], [], []) -> do
+    ([], [], []) ->
                  return "config.yml"
-    ([Config config], [], []) -> do
+    ([Config config], [], []) ->
                  return config
     ([Help], [], []) -> do
                  usage
@@ -327,13 +327,13 @@ parseOptions = do
                  usage
                  exitFailure
     (_, _, errors) -> do
-                 mapM putStr errors
+                 mapM_ putStr errors
                  usage
                  exitFailure
   where
     options =
-      [ Option ['c'] ["config"] (ReqArg Config "FILE") "specify configuration file"
-      , Option ['h'] ["help"]   (NoArg Help)           "display help and exit"
+      [ Option "c" ["config"] (ReqArg Config "FILE") "specify configuration file"
+      , Option "h" ["help"]   (NoArg Help)           "display help and exit"
       ]
     usage = do
       progName <- getProgName
